@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 
-
 interface Post {
     date: string;
     title: string;
@@ -17,12 +16,13 @@ const App: React.FC = () => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [isYearView, setIsYearView] = useState(false);
     const [monthsToShow, setMonthsToShow] = useState(1);
+    const [isWeekView, setIsWeekView] = useState(false); // New state for week view
     const [popupContent, setPopupContent] = useState<Post[]>([]);
     const [popupVisible, setPopupVisible] = useState(false);
 
     useEffect(() => {
         renderCalendar();
-    }, [selectedDate, isYearView, monthsToShow]);
+    }, [selectedDate, isYearView, monthsToShow, isWeekView]);
 
     const renderCalendar = () => {
         const year = selectedDate.getFullYear();
@@ -49,6 +49,8 @@ const App: React.FC = () => {
 
         if (isYearView) {
             renderYearView(year);
+        } else if (isWeekView) {
+            renderWeekView();
         } else {
             renderMultiMonthView(year, month);
         }
@@ -69,14 +71,50 @@ const App: React.FC = () => {
         const rows = Math.ceil((firstDayIndex + totalDays.length) / 7) * 7;
         const calendarGrid = document.getElementById('calendarGrid') as HTMLDivElement;
 
-        for (let i = 0; i < rows; i++) {
-            if (i < firstDayIndex) {
-                calendarGrid.appendChild(document.createElement('div'));
+        // Add previous month's dates
+        const prevMonthDaysToShow = firstDayIndex;
+        const prevMonth = startMonth === 0 ? 11 : startMonth - 1;
+        const prevMonthYear = startMonth === 0 ? year - 1 : year;
+        const prevMonthLastDay = new Date(prevMonthYear, prevMonth + 1, 0).getDate();
+        for (let i = prevMonthLastDay - prevMonthDaysToShow + 1; i <= prevMonthLastDay; i++) {
+            const date = new Date(prevMonthYear, prevMonth, i);
+            const dateCell = createDateCell(date, true);
+            calendarGrid.appendChild(dateCell);
+        }
+
+        for (let i = 0; i < totalDays.length; i++) {
+            const date = totalDays[i];
+            const dateCell = createDateCell(date, false);
+            calendarGrid.appendChild(dateCell);
+        }
+
+        // Add next month's dates
+        const nextMonthDaysToShow = rows - (firstDayIndex + totalDays.length);
+        const nextMonth = startMonth + monthsToShow === 12 ? 0 : startMonth + monthsToShow;
+        const nextMonthYear = startMonth + monthsToShow === 12 ? year + 1 : year;
+        for (let i = 1; i <= nextMonthDaysToShow; i++) {
+            const date = new Date(nextMonthYear, nextMonth, i);
+            const dateCell = createDateCell(date, true);
+            calendarGrid.appendChild(dateCell);
+        }
+    };
+
+    const renderWeekView = () => {
+        const calendarGrid = document.getElementById('calendarGrid') as HTMLDivElement;
+        const today = new Date();
+        const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(today.getFullYear(), today.getMonth(), day);
+            const dateCell = createDateCell(date, false);
+
+            if (day >= today.getDate() && day < today.getDate() + 7) {
+                dateCell.style.backgroundColor = 'white';
             } else {
-                const date = totalDays[i - firstDayIndex];
-                const dateCell = createDateCell(date);
-                calendarGrid.appendChild(dateCell);
+                dateCell.style.backgroundColor = 'rgb(211, 207, 207)';
             }
+
+            calendarGrid.appendChild(dateCell);
         }
     };
 
@@ -107,7 +145,7 @@ const App: React.FC = () => {
 
             for (let day = 1; day <= lastDayIndex; day++) {
                 const date = new Date(year, month, day);
-                const dateCell = createDateCell(date);
+                const dateCell = createDateCell(date, false);
                 calendarGridClone.appendChild(dateCell);
             }
 
@@ -115,21 +153,21 @@ const App: React.FC = () => {
         }
     };
 
-    const createDateCell = (date: Date): HTMLDivElement => {
+    const createDateCell = (date: Date, isAdjacentMonth: boolean): HTMLDivElement => {
         const dateCell = document.createElement('div');
         dateCell.style.border = '1px solid #ccc';
-        const day = date?.getDate();
-        const monthName = date?.toLocaleString('default', { month: 'short' });
-        dateCell.innerHTML = `<span class="date">${day}</span>`;
+        const day = date.getDate();
+        const monthName = date.toLocaleString('default', { month: 'short' });
+        dateCell.innerHTML = `<span class="date ${isAdjacentMonth ? 'adjacent-month' : ''}">${day}</span>`;
 
-        if (day === 1 && !isYearView) {
+        if (day === 1 && !isYearView && !isAdjacentMonth) {
             const monthLabel = document.createElement('span');
             monthLabel.classList.add('month-name');
             monthLabel.textContent = monthName;
             dateCell.appendChild(monthLabel);
         }
 
-        const dateStr = `${date?.getFullYear()}-${(date?.getMonth() + 1).toString().padStart(2, '0')}-${day?.toString().padStart(2, '0')}`;
+        const dateStr = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
         const datePosts = posts.filter(p => p.date === dateStr);
 
         if (monthsToShow === 1) {
@@ -199,10 +237,17 @@ const App: React.FC = () => {
                     <div>
                         <select id="monthViewSelect" className="active" onChange={(e) => {
                             const months = parseInt(e.target.value);
-                            setMonthsToShow(months);
+                            if (months === 0) {
+                                setIsWeekView(true);
+                                setMonthsToShow(1);
+                            } else {
+                                setIsWeekView(false);
+                                setMonthsToShow(months);
+                            }
                             setIsYearView(months === 12);
                         }}>
                             <option value="1" selected>Today</option>
+                            <option value="0">Week</option>
                             <option value="1">1 Month</option>
                             <option value="2">2 Months</option>
                             <option value="3">3 Months</option>
@@ -243,19 +288,18 @@ const App: React.FC = () => {
                 {/* Yearly view months will be injected here */}
             </div>
             <div className={`popup ${popupVisible ? 'visible' : ''}`} id="popup">
-    <div className="popup-header">
-        <h3>Posts</h3>
-        <button className="close-btn" onClick={closePopup}>×</button>
-    </div>
-    <div id="popupContent">
-        {popupContent.map(post => (
-            <div key={post.date + post.title} className="post" onClick={() => navigateToPostDetails(post)}>
-                {post.title} ({post.platform})
+                <div className="popup-header">
+                    <h3>Posts</h3>
+                    <button className="close-btn" onClick={closePopup}>×</button>
+                </div>
+                <div id="popupContent">
+                    {popupContent.map(post => (
+                        <div key={post.date + post.title} className="post" onClick={() => navigateToPostDetails(post)}>
+                            {post.title} ({post.platform})
+                        </div>
+                    ))}
+                </div>
             </div>
-        ))}
-    </div>
-</div>
-
         </div>
     );
 };
